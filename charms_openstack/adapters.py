@@ -641,7 +641,7 @@ class OpenStackRelationAdapters(object):
         for relation in self._relations:
             yield relation, getattr(self, relation)
 
-class OpenStackAPIRelationAdapters(object):
+class OpenStackAPIRelationAdapters(OpenStackRelationAdapters):
 
     _adapters = {
         'amqp': RabbitMQRelationAdapter,
