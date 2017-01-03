@@ -27,6 +27,7 @@ import charmhelpers.contrib.hahelpers.cluster as ch_cluster
 import charmhelpers.contrib.network.ip as ch_ip
 import charmhelpers.contrib.openstack.utils as ch_utils
 import charmhelpers.core.hookenv as hookenv
+import charmhelpers.core.host as ch_host
 import charms_openstack.ip as os_ip
 
 ADDRESS_TYPES = os_ip.ADDRESS_MAP.keys()
@@ -800,6 +801,32 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         """
         eps = [ep[2] for ep in self.endpoints]
         return sorted(list(set(eps)))
+
+    @property
+    def use_memcache(self):
+        release = ch_utils.get_os_codename_install_source(
+            self.openstack_origin)
+        return release >= 'mitaka'
+
+    @property
+    def memcache_server(self):
+        if float(ch_host.lsb_release()['DISTRIB_RELEASE']) > 14.04:
+            memcache_server = '::1'
+        else:
+            memcache_server = 'ip6-localhost'
+        return memcache_server
+
+    @property
+    def memcache_host(self):
+        return '[::1]'
+
+    @property
+    def memcache_port(self):
+        return '11211'
+
+    @property
+    def memcache_url(self):
+        return 'inet6:{}:{}'.format(self.memcache_host, self.memcache_port)
 
 
 def make_default_relation_adapter(base_cls, relation, properties):

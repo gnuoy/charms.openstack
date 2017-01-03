@@ -559,6 +559,7 @@ class OpenStackCharm(object):
     ha_resources = []
     adapters_class = None
     HAPROXY_CONF = '/etc/haproxy/haproxy.cfg'
+    MEMCACHE_CONF = '/etc/memcached.conf'
     package_codenames = {}
 
     @property
@@ -728,7 +729,9 @@ class OpenStackCharm(object):
             protocol = protocol.lower()
         else:
             protocol = ''
-        lines = [l for l in subprocess.check_output(_args).split() if l]
+        lines = [l for l in
+                 subprocess.check_output(_args).decode('UTF-8').split()
+                 if l]
         ports = []
         for line in lines:
             p, p_type = line.split('/')
@@ -1245,12 +1248,44 @@ class OpenStackAPICharm(OpenStackCharm):
     # If None, then the default ConfigurationAdapter is used.
     configuration_class = os_adapters.APIConfigurationAdapter
 
+    def upgrade_charm(self):
+        """Setup token cache in case previous charm version did not."""
+        self.setup_token_cache()
+        super(OpenStackAPICharm, self).upgrade_charm()
+
     def install(self):
         """Install packages related to this charm based on
         contents of self.packages attribute.
         """
         self.configure_source()
         super(OpenStackAPICharm, self).install()
+
+    def setup_token_cache(self):
+        """Check if a token cache package is needed and install it if it is"""
+        if fetch.filter_installed_packages(self.token_cache_pkgs()):
+            self.install()
+
+    def enable_memcache(self, release=None):
+        """Determine if memcache should be enabled on the local unit
+
+        @param release: release of OpenStack currently deployed
+        @returns boolean Whether memcache should be enabled
+        """
+        if not release:
+            release = os_utils.get_os_codename_install_source(
+                self.config['openstack-origin'])
+        return release >= 'mitaka'
+
+    def token_cache_pkgs(self, release=None):
+        """Determine additional packages needed for token caching
+
+        @param release: release of OpenStack currently deployed
+        @returns List of package to enable token caching
+        """
+        packages = []
+        if self.enable_memcache(release=release):
+            packages.extend(['memcached', 'python-memcache'])
+        return packages
 
     def get_amqp_credentials(self):
         """Provide the default amqp username and vhost as a tuple.
@@ -1289,6 +1324,42 @@ class OpenStackAPICharm(OpenStackCharm):
         raise RuntimeError(
             "get_database_setup() needs to be overriden in the derived "
             "class")
+
+    @property
+    def api_packages(self):
+        _packages = self.token_cache_pkgs()
+        return _packages
+
+    @property
+    def api_restart_map(self):
+        _restart_map = {}
+        if self.enable_memcache():
+            _restart_map[self.MEMCACHE_CONF] = ['memcached']
+        return _restart_map
+
+    @property
+    def all_packages(self):
+        """List of packages to be installed
+
+        @return ['pkg1', 'pkg2', ...]
+        """
+        _packages = self.packages[:]
+        _packages.extend(self.api_packages)
+        return _packages
+
+    @property
+    def full_restart_map(self):
+        """Map of services to be restarted if a file changes
+
+        @return {
+                    'file1': ['svc1', 'svc3'],
+                    'file2': ['svc2', 'svc3'],
+                    ...
+                }
+        """
+        _restart_map = self.restart_map.copy()
+        _restart_map.update(self.api_restart_map)
+        return _restart_map
 
 
 class HAOpenStackCharm(OpenStackAPICharm):
@@ -1333,6 +1404,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
         @return ['pkg1', 'pkg2', ...]
         """
         _packages = self.packages[:]
+        _packages.extend(self.api_packages)
         if self.haproxy_enabled():
             _packages.append('haproxy')
         if self.apache_enabled():
@@ -1350,6 +1422,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
                 }
         """
         _restart_map = self.restart_map.copy()
+        _restart_map.update(self.api_restart_map)
         if self.haproxy_enabled():
             _restart_map[self.HAPROXY_CONF] = ['haproxy']
         if self.apache_enabled():
