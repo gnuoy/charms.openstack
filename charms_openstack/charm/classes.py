@@ -188,6 +188,27 @@ class OpenStackCharm(BaseOpenStackCharm,
         """Resume the charms services."""
         self.run_pause_or_resume('resume')
 
+    def series_upgrade_prepare(self):
+        """Prepare to upgrade series"""
+        os_utils.set_unit_upgrading()
+        self.run_pause_or_resume('pause')
+
+    def series_upgrade_complete(self):
+        """Prepare to upgrade series"""
+        os_utils.clear_unit_paused()
+        os_utils.clear_unit_upgrading()
+        if self.check_interfaces()[0] is None:
+            hookenv.log(
+                "Rendering configs after series upgrade",
+                hookenv.DEBUG)
+            self.render_all_configs()
+        else:
+            hookenv.log(
+                ("Skipping rendering configs after series upgrade as some "
+                 "relations are missing"),
+                hookenv.DEBUG)
+        self.run_pause_or_resume('resume')
+
 
 class OpenStackAPICharm(OpenStackCharm):
     """The base class for API OS charms -- this just bakes in the default
