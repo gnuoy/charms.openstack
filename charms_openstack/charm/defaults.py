@@ -21,6 +21,7 @@ ALLOWED_DEFAULT_HANDLERS = [
     'update-status',
     'upgrade-charm',
     'certificates.available',
+    'upgrade.series.in-progress',
 ]
 
 # Where to store the default handler functions for each default state
@@ -218,3 +219,10 @@ def make_default_update_status_handler():
     or hooks directory.
     """
     reactive.set_state('charms.openstack.do-default-update-status')
+
+
+@_map_default_handler('upgrade.series.in-progress')
+def make_default_upgrade_series_handler():
+    """
+    """
+    reactive.set_state('charms.openstack.do-upgrade-series')
