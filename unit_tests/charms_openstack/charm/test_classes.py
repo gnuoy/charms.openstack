@@ -496,8 +496,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.get_netmask_for_address.side_effect = lambda x: masks[x]
         self.target._add_ha_vips_config(interface_mock)
         calls = [
-            mock.call('myservice', 'vip1', 'eth1', 'netmask1'),
-            mock.call('myservice', 'vip2', 'eth2', 'netmask2')]
+            mock.call('myservice', 'vip1', None, None),
+            mock.call('myservice', 'vip2', None, None)]
         interface_mock.add_vip.assert_has_calls(calls)
 
     def test__add_ha_vips_config_fallback(self):

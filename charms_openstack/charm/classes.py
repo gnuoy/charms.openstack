@@ -682,12 +682,9 @@ class HAOpenStackCharm(OpenStackAPICharm):
         if not self.config.get(VIP_KEY):
             return
         for vip in self.config[VIP_KEY].split():
-            iface = (ch_ip.get_iface_for_address(vip) or
-                     self.config.get(IFACE_KEY))
-            netmask = (ch_ip.get_netmask_for_address(vip) or
-                       self.config.get(CIDR_KEY))
-            if iface is not None:
-                hacluster.add_vip(self.name, vip, iface, netmask)
+            iface = self.config.get(IFACE_KEY) or None
+            netmask = self.config.get(CIDR_KEY) or None
+            hacluster.add_vip(self.name, vip, iface, netmask)
 
     def _add_ha_haproxy_config(self, hacluster):
         """Add a InitService object for haproxy to self.resources
