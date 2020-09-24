@@ -413,6 +413,21 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
                 charm_instance=self)
         return self.__options
 
+    @property
+    def _api_ports(self):
+        """Return the api port map adjusting ports as required.
+        """
+        ssl_port_bump = getattr(self, 'ssl_port_bump', False)
+        if ssl_port_bump and self.get_state('ssl.enabled'):
+            _api_ports = {}
+            for svc in self.api_ports:
+                _api_ports[svc] = {}
+                for ep_type, port in self.api_ports[svc].items():
+                    _api_ports[svc][ep_type] = int("1{}".format(port))
+            return _api_ports
+        else:
+            return self.api_ports
+
     def api_port(self, service, endpoint_type=os_ip.PUBLIC):
         """Return the API port for a particular endpoint type from the
         self.api_ports{}.
@@ -421,7 +436,7 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
         :param endpoing_type: one of charm.openstack.ip.PUBLIC| INTERNAL| ADMIN
         :returns: port (int)
         """
-        return self.api_ports[service][endpoint_type]
+        return self._api_ports[service][endpoint_type]
 
     def set_state(self, state, value=None):
         """proxy for charms.reactive.bus.set_state()"""
@@ -929,7 +944,7 @@ class BaseOpenStackCharmActions(object):
         :param ports: List of api port numbers or None.
         """
         ports = list(map(int, (
-            ports or self._default_port_list(self.api_ports or {}))))
+            ports or self._default_port_list(self._api_ports or {}))))
         current_ports = list(map(int, self.opened_ports()))
         ports_to_open = set(ports).difference(current_ports)
         ports_to_close = set(current_ports).difference(ports)
