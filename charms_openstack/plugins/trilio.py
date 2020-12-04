@@ -14,15 +14,21 @@
 
 import base64
 import os
+import re
+from urllib.parse import urlparse
+
+import charmhelpers.core.unitdata as unitdata
 
 import charms_openstack.charm
 
 import charmhelpers.core as ch_core
 import charmhelpers.fetch as fetch
+import charmhelpers.core.unitdata as unitdata
 
 import charms.reactive as reactive
 
 
+TRILIO_RELEASE_KEY = 'charmers.openstack-release-version'
 TV_MOUNTS = "/var/triliovault-mounts"
 
 
@@ -85,6 +91,52 @@ def _install_triliovault(charm):
         reactive.clear_flag('upgrade.triliovault')
 
 
+@charms_openstack.charm.core.register_get_charm_instance
+def get_trillio_charm_instance(release=None, package_type='deb', *args, **kwargs):
+    """Get an instance of the charm based on the release (or use the
+    default if release is None).
+
+    Note that it passes args and kwargs to the class __init__() method.
+
+    :param release: lc string representing release wanted.
+    :param package_type: string representing the package type required
+    :returns: BaseOpenStackCharm() derived class according to cls.releases
+    """
+    trilio_releases = {}
+    cls = None
+    for os_release, classes in charms_openstack.charm.core._releases.items():
+        trilio_releases[classes['deb'].trilio_release] = classes['deb']
+    known_releases = list(reversed(list(trilio_releases.keys())))
+    if release is None:
+        cls = trilio_releases[known_releases[0]]
+    else:
+        for _release in known_releases:
+            if float(release) >= float(_release):
+                cls = trilio_releases[_release]
+                break
+    return cls(trilio_release=release, *args, **kwargs)
+
+
+@charms_openstack.charm.core.register_os_release_selector
+def select_trilio_release():
+    release_version = unitdata.kv().get(TRILIO_RELEASE_KEY, None)
+    release_version = None
+    if release_version is None:
+        singleton = get_trillio_charm_instance()
+        try:
+            release_version = singleton.get_package_version(
+                singleton.release_pkg)
+        except ValueError:
+            # Try and make sense of deb string like:
+            # 'deb [trusted=yes] https://apt.fury.io/triliodata-4-0/ /'
+            deb_url = singleton.trilio_source.split()[-2]
+            code = re.findall(r'-(\d*-\d*)', urlparse(deb_url).path)
+            assert len(code) == 1, "Cannot derive release from {}".format(deb_url)
+            release_version = code[0].replace('-', '.')
+        unitdata.kv().set(TRILIO_RELEASE_KEY, release_version)
+    return release_version
+
+
 class TrilioVaultCharm(charms_openstack.charm.HAOpenStackCharm):
     """The TrilioVaultCharm class provides common specialisation of certain
     functions for the Trilio charm set and is designed for use alongside
@@ -114,6 +166,10 @@ class TrilioVaultCharm(charms_openstack.charm.HAOpenStackCharm):
         super().series_upgrade_complete()
         self.configure_source()
 
+    @property
+    def trilio_source(self):
+        return hookenv.config("triliovault-pkg-source")
+
 
 class TrilioVaultSubordinateCharm(charms_openstack.charm.OpenStackCharm):
     """The TrilioVaultSubordinateCharm class provides common specialisation
@@ -142,6 +198,10 @@ class TrilioVaultSubordinateCharm(charms_openstack.charm.OpenStackCharm):
         """Re-configure sources post series upgrade"""
         super().series_upgrade_complete()
         self.configure_source()
+
+    @property
+    def trilio_source(self):
+        return hookenv.config("triliovault-pkg-source")
 
 
 class TrilioVaultCharmGhostAction(object):
